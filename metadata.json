@@ -1,0 +1,6 @@
+{
+  "name": "OmniBG Remover Enhanced",
+  "description": "100% free client-side AI image background remover, batch processor, cropping & orientation, backdrop replacement, manual retouching, and multi-format export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
