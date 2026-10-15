@@ -20,16 +20,26 @@ import {
   HelpCircle,
   FileImage,
   RefreshCw,
-  FolderArchive
+  FolderArchive,
+  BookOpen
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { ImageItem, HistoryItem } from './types';
 import { SAMPLE_IMAGES } from './utils/presets';
 import { executeBackgroundRemoval } from './services/bgRemoval';
-import { getHistory, removeFromHistory, clearHistory, downloadBlob, loadImage } from './utils/canvasUtils';
+import { 
+  getHistoryItems, 
+  addToHistory, 
+  removeFromHistory, 
+  clearHistory, 
+  subscribeToHistory, 
+  downloadBlob, 
+  loadImage 
+} from './utils/canvasUtils';
 import { BatchQueue } from './components/BatchQueue';
 import { EditorView } from './components/EditorView';
 import { HistoryDrawer } from './components/HistoryDrawer';
+import { DocsModal } from './components/DocsModal';
 
 export default function App() {
   const [items, setItems] = useState<ImageItem[]>([]);
@@ -37,20 +47,36 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState<'medium' | 'small' | 'large'>('medium');
   const [isProcessingBatch, setIsProcessingBatch] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [isDocsOpen, setIsDocsOpen] = useState<boolean>(false);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [isLoadingSample, setIsLoadingSample] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load history from localStorage on mount
+  // Load history from IndexedDB/localStorage & subscribe to real-time events
   useEffect(() => {
-    setHistoryItems(getHistory());
+    let isMounted = true;
+    const fetchHistory = async () => {
+      const list = await getHistoryItems();
+      if (isMounted) setHistoryItems(list);
+    };
+
+    fetchHistory();
+    const unsubscribe = subscribeToHistory(() => {
+      fetchHistory();
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
-  // Update history items list
-  const refreshHistory = () => {
-    setHistoryItems(getHistory());
+  // Update history items list manually if needed
+  const refreshHistory = async () => {
+    const list = await getHistoryItems();
+    setHistoryItems(list);
   };
 
   // Helper to create an ImageItem from File or URL
@@ -163,6 +189,31 @@ export default function App() {
 
       const processedUrl = URL.createObjectURL(resultBlob);
       const img = await loadImage(processedUrl);
+
+      // Automatically save completed cutout to history
+      try {
+        const thumbCanvas = document.createElement('canvas');
+        const maxDim = 200;
+        const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+        thumbCanvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        thumbCanvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        const tctx = thumbCanvas.getContext('2d');
+        if (tctx) {
+          tctx.drawImage(img, 0, 0, thumbCanvas.width, thumbCanvas.height);
+          const thumbUrl = thumbCanvas.toDataURL('image/webp', 0.8);
+          const currentItem = items.find(i => i.id === itemId);
+          addToHistory({
+            name: currentItem?.name || 'cutout',
+            thumbnail: thumbUrl,
+            dataUrl: processedUrl,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+            format: 'png'
+          });
+        }
+      } catch (histErr) {
+        console.warn('Auto history save error:', histErr);
+      }
 
       setItems(prev => prev.map(item => {
         if (item.id === itemId) {
@@ -324,6 +375,16 @@ export default function App() {
               </select>
             </div>
 
+            {/* Docs & User Guide Trigger */}
+            <button
+              onClick={() => setIsDocsOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 hover:text-white rounded-xl border border-indigo-500/30 transition shadow-xs"
+              title="Read full user guide and documentation"
+            >
+              <BookOpen className="w-4 h-4 text-indigo-400" />
+              <span className="hidden sm:inline">Docs / Guide</span>
+            </button>
+
             {/* History Drawer Trigger */}
             <button
               onClick={() => {
@@ -336,7 +397,7 @@ export default function App() {
               <HistoryIcon className="w-4 h-4 text-indigo-400" />
               <span className="hidden sm:inline">History</span>
               {historyItems.length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center animate-in fade-in zoom-in duration-200">
                   {historyItems.length}
                 </span>
               )}
@@ -526,14 +587,20 @@ export default function App() {
           setItems(prev => [item, ...prev]);
           setActiveItemId(item.id);
         }}
-        onDelete={(id) => {
-          const updated = removeFromHistory(id);
+        onDelete={async (id) => {
+          const updated = await removeFromHistory(id);
           setHistoryItems(updated);
         }}
         onClear={() => {
           clearHistory();
           setHistoryItems([]);
         }}
+      />
+
+      {/* Docs / User Guide Modal */}
+      <DocsModal
+        isOpen={isDocsOpen}
+        onClose={() => setIsDocsOpen(false)}
       />
     </div>
   );

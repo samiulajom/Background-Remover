@@ -3,6 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Safeguard window.fetch to allow browser extensions to attach interceptors without TypeError
+      try {
+        const _origFetch = window.fetch ? window.fetch.bind(window) : null;
+        let _activeFetch = _origFetch;
+        Object.defineProperty(window, 'fetch', {
+          configurable: true,
+          enumerable: true,
+          get() {
+            return _activeFetch;
+          },
+          set(newFetch) {
+            _activeFetch = typeof newFetch === 'function' ? newFetch : _origFetch;
+          }
+        });
+      } catch (e) {
+        // Ignore if non-configurable
+      }
+
+      // Suppress unhandled errors injected by third-party browser extensions
+      window.addEventListener('error', function (event) {
+        if (event.filename && (event.filename.includes('chrome-extension://') || event.filename.includes('moz-extension://'))) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      }, true);
+    </script>
     <title>OmniBG Remover Enhanced - 100% Free AI Background Remover</title>
     <meta name="description" content="100% free client-side AI image background remover, batch processor, cropping & orientation, backdrop replacement, manual retouching, and multi-format export." />
     <meta property="og:title" content="OmniBG Remover Enhanced - 100% Free AI Background Remover" />

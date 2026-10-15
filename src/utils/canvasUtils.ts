@@ -436,50 +436,35 @@ export async function copyCanvasToClipboard(canvas: HTMLCanvasElement): Promise<
   }
 }
 
-// LocalStorage history management
-const HISTORY_KEY = 'omnibg_history_v2';
-const MAX_HISTORY = 12;
+import { 
+  addHistoryItem, 
+  getHistoryItems, 
+  deleteHistoryItem, 
+  clearAllHistoryItems,
+  subscribeToHistory
+} from './historyStorage';
 
-export function getHistory(): HistoryItem[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    console.warn('Failed to read history from localStorage', e);
-    return [];
-  }
+export {
+  addHistoryItem,
+  getHistoryItems,
+  deleteHistoryItem,
+  clearAllHistoryItems,
+  subscribeToHistory
+};
+
+// Backwards-compatible aliases
+export async function getHistory(): Promise<HistoryItem[]> {
+  return getHistoryItems();
 }
 
 export function addToHistory(item: Omit<HistoryItem, 'id' | 'timestamp'>): void {
-  try {
-    const history = getHistory();
-    const newItem: HistoryItem = {
-      ...item,
-      id: 'hist_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-      timestamp: Date.now()
-    };
-    const updated = [newItem, ...history.filter(h => h.name !== item.name)].slice(0, MAX_HISTORY);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
-  } catch (e) {
-    console.warn('Failed to save history to localStorage', e);
-  }
+  addHistoryItem(item);
 }
 
-export function removeFromHistory(id: string): HistoryItem[] {
-  try {
-    const history = getHistory().filter(item => item.id !== id);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    return history;
-  } catch (e) {
-    console.warn('Failed to remove item from history', e);
-    return [];
-  }
+export async function removeFromHistory(id: string): Promise<HistoryItem[]> {
+  return deleteHistoryItem(id);
 }
 
 export function clearHistory(): void {
-  try {
-    localStorage.removeItem(HISTORY_KEY);
-  } catch (e) {
-    console.warn('Failed to clear history', e);
-  }
+  clearAllHistoryItems();
 }
